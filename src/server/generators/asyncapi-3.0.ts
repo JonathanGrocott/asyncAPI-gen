@@ -41,7 +41,7 @@ export function generateAsyncAPI30(
     const { channelDef, operation, messages } = buildChannel30(channel, registry, config);
     
     doc.channels![channel.channelId] = channelDef;
-    doc.operations![`publish_${channel.channelId}`] = operation;
+    doc.operations![`subscribe_${channel.channelId}`] = operation;
     
     // Add messages to components
     for (const [msgName, msgDef] of Object.entries(messages)) {
@@ -145,15 +145,15 @@ function buildChannel30(
     };
   }
 
-  // Build operation - using 'send' because this spec documents what the system publishes
-  // Developers subscribing to these channels will receive what is documented here
+  // Build operation - using 'receive' for developer-centric documentation
+  // This tells developers "subscribe here to receive this data"
   const operation: Operation30 = {
-    action: 'send',
+    action: 'receive',
     channel: {
       $ref: `#/channels/${channel.channelId}`,
     },
-    summary: `Publishes data to ${channel.topic}`,
-    description: `Subscribe to this channel to receive messages. The system publishes data in the format described below.`,
+    summary: `Subscribe to ${channel.topic} to receive data`,
+    description: `Subscribe to this channel to receive messages in the format described below.`,
     messages: Object.keys(messages).map(msgId => ({
       $ref: `#/channels/${channel.channelId}/messages/${msgId}`,
     })),

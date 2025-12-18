@@ -94,10 +94,10 @@ function buildChannelItem26(
     }
   }
 
-  // Build publish operation - documents what the system publishes
-  // In AsyncAPI 2.6, 'publish' means the API publishes these messages (subscribers receive them)
+  // Build subscribe operation - developer-centric documentation
+  // This tells developers "subscribe here to receive this data"
   const operation = buildOperation26(channel, registry, config);
-  channelItem.publish = operation;
+  channelItem.subscribe = operation;
 
   // Add bindings if configured
   if (config.mqtt) {
@@ -118,9 +118,9 @@ function buildOperation26(
   config: GeneratorConfig
 ): Operation26 {
   const operation: Operation26 = {
-    operationId: `publish_${channel.channelId}`,
-    summary: `Publishes data to ${channel.topic}`,
-    description: `Subscribe to this channel to receive messages. The system publishes data in the format described below.`,
+    operationId: `subscribe_${channel.channelId}`,
+    summary: `Subscribe to ${channel.topic} to receive data`,
+    description: `Subscribe to this channel to receive messages in the format described below.`,
   };
 
   // Group messages by their schema
