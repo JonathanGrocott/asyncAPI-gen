@@ -1,21 +1,38 @@
 # AsyncAPI Generator
 
-A web-based tool for generating AsyncAPI specifications from JSON examples or live MQTT broker data. Supports both AsyncAPI 2.6.0 and 3.0.0 versions.
+A web-based tool for generating AsyncAPI specifications from JSON examples. Supports both AsyncAPI 2.6.0 and 3.0.0 versions. **Runs entirely in the browser** - no backend required!
 
 ## Features
 
-- **JSON Import**: Upload JSON files with nested hierarchical data containing `_path` and `_model` fields
-- **MQTT Live Capture**: Connect to an MQTT broker and capture messages in real-time with wildcard subscriptions
+- **JSON Import**: Upload JSON files or paste JSON data directly
+- **Server Configuration**: Configure MQTT brokers for the generated spec
 - **Dual Version Support**: Generate specs for AsyncAPI 2.6.0 or 3.0.0
+- **Developer-Centric Documentation**: Uses `subscribe`/`receive` operations to document channels from a developer's perspective
 - **Channel Modes**:
   - **Verbose**: One channel per unique topic
   - **Parameterized**: Create template topics with parameters (e.g., `Building/{area}/Machine/{machineId}`)
+- **Schema Inference**: Automatically infers JSON Schema from payload examples
 - **Schema Deduplication**: Automatically reuses schemas for identical payloads
 - **Model-based Grouping**: Uses `_model` field in JSON data to group and name schemas
 - **Real-time Preview**: Live YAML/JSON preview of the generated specification
 - **Export**: Download the generated spec as YAML or JSON
 
-## Installation
+## 🚀 Deployment on Vercel
+
+This app is designed for static deployment on Vercel (or any static hosting):
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/asyncAPI-gen&project-name=asyncapi-generator&repository-name=asyncapi-generator)
+
+Or manually:
+
+```bash
+npm run build
+# Deploy the 'dist' folder to any static hosting
+```
+
+The `vercel.json` is already configured for automatic deployment.
+
+## Installation (Local Development)
 
 ```bash
 npm install
@@ -29,13 +46,21 @@ npm install
 npm run dev
 ```
 
-This starts both the frontend (http://localhost:5173) and backend (http://localhost:3001) servers.
+This starts the Vite development server at http://localhost:5173. All processing happens in the browser.
 
 ### Production Build
 
 ```bash
 npm run build
-npm start
+npm run preview
+```
+
+### Full Server Mode (Optional)
+
+If you need the full server with MQTT live capture:
+
+```bash
+npm run dev:full
 ```
 
 ## How to Use
