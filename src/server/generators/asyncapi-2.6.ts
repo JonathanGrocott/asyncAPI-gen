@@ -46,20 +46,31 @@ export function generateAsyncAPI26(
  * Build servers object for 2.6.0
  */
 function buildServers26(config: GeneratorConfig): AsyncAPI26Document['servers'] {
-  if (!config.mqtt) {
-    return undefined;
+  // Use configured servers if provided
+  if (config.servers && config.servers.length > 0) {
+    const servers: AsyncAPI26Document['servers'] = {};
+    for (const server of config.servers) {
+      servers[server.name] = {
+        url: server.url,
+        protocol: server.protocol,
+        description: server.description || `${server.protocol.toUpperCase()} Broker`,
+      };
+    }
+    return servers;
   }
 
-  return {
-    production: {
-      url: `${config.mqtt.host}:${config.mqtt.port}`,
-      protocol: 'mqtt',
-      description: 'MQTT Broker',
-      ...(config.mqtt.username ? {
-        security: [{ userPassword: [] }],
-      } : {}),
-    },
-  };
+  // Fallback to MQTT connection config if no servers configured
+  if (config.mqtt) {
+    return {
+      production: {
+        url: `${config.mqtt.host}:${config.mqtt.port}`,
+        protocol: 'mqtt',
+        description: 'MQTT Broker',
+      },
+    };
+  }
+
+  return undefined;
 }
 
 /**
@@ -83,9 +94,10 @@ function buildChannelItem26(
     }
   }
 
-  // Build subscribe operation (all messages are incoming in this use case)
+  // Build publish operation - documents what the system publishes
+  // In AsyncAPI 2.6, 'publish' means the API publishes these messages (subscribers receive them)
   const operation = buildOperation26(channel, registry, config);
-  channelItem.subscribe = operation;
+  channelItem.publish = operation;
 
   // Add bindings if configured
   if (config.mqtt) {
@@ -106,8 +118,9 @@ function buildOperation26(
   config: GeneratorConfig
 ): Operation26 {
   const operation: Operation26 = {
-    operationId: `receive_${channel.channelId}`,
-    summary: `Receive messages on ${channel.topic}`,
+    operationId: `publish_${channel.channelId}`,
+    summary: `Publishes data to ${channel.topic}`,
+    description: `Subscribe to this channel to receive messages. The system publishes data in the format described below.`,
   };
 
   // Group messages by their schema

@@ -21,6 +21,18 @@ export interface TopicSubstitution {
   pattern?: string;
 }
 
+// Server configuration for the generated spec
+export interface ServerConfig {
+  /** Server name/identifier */
+  name: string;
+  /** Server URL (host:port or full URL) */
+  url: string;
+  /** Protocol (mqtt, mqtts, ws, wss, etc.) */
+  protocol: 'mqtt' | 'mqtts' | 'ws' | 'wss';
+  /** Server description */
+  description?: string;
+}
+
 // Configuration for the generator
 export interface GeneratorConfig {
   /** AsyncAPI specification version */
@@ -39,7 +51,9 @@ export interface GeneratorConfig {
     version: string;
     description?: string;
   };
-  /** MQTT configuration */
+  /** Server configuration for the generated spec */
+  servers?: ServerConfig[];
+  /** MQTT configuration (for live listening) */
   mqtt?: MQTTConfig;
 }
 

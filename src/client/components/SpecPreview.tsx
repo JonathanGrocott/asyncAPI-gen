@@ -1,54 +1,97 @@
+import { useState } from 'react';
+
 interface SpecPreviewProps {
   spec: string | null;
   format: 'yaml' | 'json';
-  onGenerate: () => void;
-  onExport: (format: 'yaml' | 'json') => void;
+  onGenerate: () => Promise<void>;
+  onExport: (format: 'yaml' | 'json', filename: string) => void;
   hasMessages: boolean;
 }
 
 export function SpecPreview({ spec, format, onGenerate, onExport, hasMessages }: SpecPreviewProps) {
+  const [filename, setFilename] = useState('asyncapi');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    try {
+      await onGenerate();
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleExport = (fmt: 'yaml' | 'json') => {
+    onExport(fmt, filename || 'asyncapi');
+  };
+
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 h-full flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b border-slate-700">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-          </svg>
-          Generated Spec
-        </h2>
-        
+      <div className="p-4 border-b border-slate-700 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+            Generated Spec
+          </h2>
+        </div>
+
+        {/* Filename input */}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={filename}
+            onChange={(e) => setFilename(e.target.value)}
+            placeholder="Filename"
+            className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <span className="text-slate-500 text-sm">.{format}</span>
+        </div>
+
+        {/* Action buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={onGenerate}
-            disabled={!hasMessages}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white py-1.5 px-3 rounded text-sm transition-colors"
+            onClick={handleGenerate}
+            disabled={!hasMessages || isGenerating}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white py-2 px-4 rounded text-sm transition-colors flex items-center justify-center gap-2"
           >
-            Generate
+            {isGenerating ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Generating...
+              </>
+            ) : (
+              'Generate'
+            )}
           </button>
-          
+
           {spec && (
-            <div className="flex rounded overflow-hidden border border-slate-600">
+            <>
               <button
-                onClick={() => onExport('yaml')}
-                className={`px-2 py-1 text-xs transition-colors ${
-                  format === 'yaml' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                onClick={() => handleExport('yaml')}
+                className={`py-2 px-3 rounded text-sm transition-colors ${
+                  format === 'yaml'
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
                 }`}
               >
-                YAML
+                ↓ YAML
               </button>
               <button
-                onClick={() => onExport('json')}
-                className={`px-2 py-1 text-xs transition-colors ${
-                  format === 'json' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                onClick={() => handleExport('json')}
+                className={`py-2 px-3 rounded text-sm transition-colors ${
+                  format === 'json'
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
                 }`}
               >
-                JSON
+                ↓ JSON
               </button>
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -66,8 +109,8 @@ export function SpecPreview({ spec, format, onGenerate, onExport, hasMessages }:
               </svg>
               <p className="text-sm">No spec generated yet</p>
               <p className="text-xs mt-1">
-                {hasMessages 
-                  ? 'Click Generate to create AsyncAPI spec' 
+                {hasMessages
+                  ? 'Click Generate to create AsyncAPI spec'
                   : 'Add messages first, then generate'
                 }
               </p>

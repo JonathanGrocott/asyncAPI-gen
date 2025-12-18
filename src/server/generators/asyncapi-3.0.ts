@@ -41,7 +41,7 @@ export function generateAsyncAPI30(
     const { channelDef, operation, messages } = buildChannel30(channel, registry, config);
     
     doc.channels![channel.channelId] = channelDef;
-    doc.operations![`receive_${channel.channelId}`] = operation;
+    doc.operations![`publish_${channel.channelId}`] = operation;
     
     // Add messages to components
     for (const [msgName, msgDef] of Object.entries(messages)) {
@@ -59,20 +59,31 @@ export function generateAsyncAPI30(
  * Build servers object for 3.0.0
  */
 function buildServers30(config: GeneratorConfig): AsyncAPI30Document['servers'] {
-  if (!config.mqtt) {
-    return undefined;
+  // Use configured servers if provided
+  if (config.servers && config.servers.length > 0) {
+    const servers: AsyncAPI30Document['servers'] = {};
+    for (const server of config.servers) {
+      servers[server.name] = {
+        host: server.url,
+        protocol: server.protocol,
+        description: server.description || `${server.protocol.toUpperCase()} Broker`,
+      };
+    }
+    return servers;
   }
 
-  return {
-    production: {
-      host: `${config.mqtt.host}:${config.mqtt.port}`,
-      protocol: 'mqtt',
-      description: 'MQTT Broker',
-      ...(config.mqtt.username ? {
-        security: [{ $ref: '#/components/securitySchemes/userPassword' }],
-      } : {}),
-    },
-  };
+  // Fallback to MQTT connection config if no servers configured
+  if (config.mqtt) {
+    return {
+      production: {
+        host: `${config.mqtt.host}:${config.mqtt.port}`,
+        protocol: 'mqtt',
+        description: 'MQTT Broker',
+      },
+    };
+  }
+
+  return undefined;
 }
 
 /**
@@ -134,13 +145,15 @@ function buildChannel30(
     };
   }
 
-  // Build operation
+  // Build operation - using 'send' because this spec documents what the system publishes
+  // Developers subscribing to these channels will receive what is documented here
   const operation: Operation30 = {
-    action: 'receive',
+    action: 'send',
     channel: {
       $ref: `#/channels/${channel.channelId}`,
     },
-    summary: `Receive messages on ${channel.topic}`,
+    summary: `Publishes data to ${channel.topic}`,
+    description: `Subscribe to this channel to receive messages. The system publishes data in the format described below.`,
     messages: Object.keys(messages).map(msgId => ({
       $ref: `#/channels/${channel.channelId}/messages/${msgId}`,
     })),

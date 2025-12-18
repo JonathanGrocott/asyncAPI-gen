@@ -240,12 +240,20 @@ function App() {
     try {
       const response = await fetch('/api/generate', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to generate spec');
+      const data = await response.json();
+      // Update local state with the generated spec
+      if (data.output) {
+        setState(prev => ({
+          ...prev,
+          spec: data.output,
+        }));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     }
   };
 
-  const exportSpec = async (format: 'yaml' | 'json') => {
+  const exportSpec = async (format: 'yaml' | 'json', filename: string) => {
     try {
       const response = await fetch(`/api/export?format=${format}`);
       if (!response.ok) throw new Error('Failed to export');
@@ -254,7 +262,7 @@ function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `asyncapi.${format}`;
+      a.download = `${filename}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
