@@ -1,14 +1,13 @@
 /**
- * AsyncAPI Generator - Main Server
+ * AsyncAPI Generator - Main Server (Express)
  */
 
-import Fastify from 'fastify';
-import fastifyWebsocket from '@fastify/websocket';
-import fastifyStatic from '@fastify/static';
-import fastifyCors from '@fastify/cors';
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { readFile } from 'fs/promises';
 
 import type { 
   ProjectState, 
@@ -50,54 +49,48 @@ let projectState: ServerProjectState = {
 };
 
 let mqttListener: MQTTListener | null = null;
-const wsClients: Set<import('ws').WebSocket> = new Set();
+const wsClients: Set<WebSocket> = new Set();
 
-// Create Fastify instance
-const fastify = Fastify({
-  logger: true,
-});
+// Create Express app
+const app = express();
+const server = createServer(app);
 
-// Register plugins
-await fastify.register(fastifyCors, {
-  origin: true,
-});
+// Create WebSocket server
+const wss = new WebSocketServer({ server, path: '/ws' });
 
-await fastify.register(fastifyWebsocket);
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  await fastify.register(fastifyStatic, {
-    root: join(__dirname, '../../dist/client'),
-    prefix: '/',
-  });
+  app.use(express.static(join(__dirname, '../../dist/client')));
 }
 
-// WebSocket route for real-time updates
-fastify.register(async function (fastify) {
-  fastify.get('/ws', { websocket: true }, (socket, req) => {
-    wsClients.add(socket);
-    
-    // Send current state on connect
-    sendToClient(socket, {
-      type: 'state',
-      payload: getStateForClient(),
-    });
+// WebSocket connection handler
+wss.on('connection', (socket: WebSocket) => {
+  wsClients.add(socket);
+  
+  // Send current state on connect
+  sendToClient(socket, {
+    type: 'state',
+    payload: getStateForClient(),
+  });
 
-    socket.on('message', (message: Buffer) => {
-      try {
-        const data = JSON.parse(message.toString()) as WSMessage;
-        handleWebSocketMessage(socket, data);
-      } catch (error) {
-        sendToClient(socket, {
-          type: 'error',
-          payload: { message: 'Invalid message format' },
-        });
-      }
-    });
+  socket.on('message', (message: Buffer) => {
+    try {
+      const data = JSON.parse(message.toString()) as WSMessage;
+      handleWebSocketMessage(socket, data);
+    } catch (error) {
+      sendToClient(socket, {
+        type: 'error',
+        payload: { message: 'Invalid message format' },
+      });
+    }
+  });
 
-    socket.on('close', () => {
-      wsClients.delete(socket);
-    });
+  socket.on('close', () => {
+    wsClients.delete(socket);
   });
 });
 
@@ -106,17 +99,17 @@ fastify.register(async function (fastify) {
 /**
  * Get current project state
  */
-fastify.get('/api/state', async () => {
-  return getStateForClient();
+app.get('/api/state', (req: Request, res: Response) => {
+  res.json(getStateForClient());
 });
 
 /**
  * Update configuration
  */
-fastify.post<{ Body: Partial<GeneratorConfig> }>('/api/config', async (request) => {
+app.post('/api/config', (req: Request, res: Response) => {
   projectState.config = {
     ...projectState.config,
-    ...request.body,
+    ...req.body,
   };
   
   // Regenerate spec if we have messages
@@ -125,70 +118,61 @@ fastify.post<{ Body: Partial<GeneratorConfig> }>('/api/config', async (request) 
   }
   
   broadcastState();
-  return { success: true, config: projectState.config };
+  res.json({ success: true, config: projectState.config });
 });
 
 /**
  * Upload JSON file
  */
-fastify.post<{ Body: { content: string; filename?: string } }>(
-  '/api/upload/json',
-  async (request) => {
-    try {
-      const messages = parseJsonContent(request.body.content);
-      
-      // Add to existing messages or replace
-      projectState.messages = [...projectState.messages, ...messages];
-      
-      // Regenerate spec
-      regenerateSpec();
-      
-      broadcastState();
-      
-      return {
-        success: true,
-        messagesAdded: messages.length,
-        totalMessages: projectState.messages.length,
-      };
-    } catch (error) {
-      throw { statusCode: 400, message: 'Failed to parse JSON content' };
-    }
+app.post('/api/upload/json', (req: Request, res: Response) => {
+  try {
+    const messages = parseJsonContent(req.body.content);
+    
+    // Add to existing messages or replace
+    projectState.messages = [...projectState.messages, ...messages];
+    
+    // Regenerate spec
+    regenerateSpec();
+    
+    broadcastState();
+    
+    res.json({
+      success: true,
+      messagesAdded: messages.length,
+      totalMessages: projectState.messages.length,
+    });
+  } catch (error) {
+    res.status(400).json({ error: 'Failed to parse JSON content' });
   }
-);
+});
 
 /**
  * Load JSON from file path (for development/testing)
  */
-fastify.post<{ Body: { filePath: string } }>(
-  '/api/load/file',
-  async (request) => {
-    try {
-      const messages = await loadJsonFile(request.body.filePath);
-      
-      projectState.messages = [...projectState.messages, ...messages];
-      regenerateSpec();
-      broadcastState();
-      
-      return {
-        success: true,
-        messagesAdded: messages.length,
-        totalMessages: projectState.messages.length,
-      };
-    } catch (error) {
-      throw { 
-        statusCode: 400, 
-        message: `Failed to load file: ${error instanceof Error ? error.message : String(error)}` 
-      };
-    }
+app.post('/api/load/file', async (req: Request, res: Response) => {
+  try {
+    const messages = await loadJsonFile(req.body.filePath);
+    
+    projectState.messages = [...projectState.messages, ...messages];
+    regenerateSpec();
+    broadcastState();
+    
+    res.json({
+      success: true,
+      messagesAdded: messages.length,
+      totalMessages: projectState.messages.length,
+    });
+  } catch (error) {
+    res.status(400).json({ 
+      error: `Failed to load file: ${error instanceof Error ? error.message : String(error)}` 
+    });
   }
-);
+});
 
 /**
  * Connect to MQTT broker
  */
-fastify.post<{ 
-  Body: { host: string; port: number; username?: string; password?: string; topics?: string[] } 
-}>('/api/mqtt/connect', async (request) => {
+app.post('/api/mqtt/connect', async (req: Request, res: Response) => {
   try {
     // Disconnect existing connection
     if (mqttListener) {
@@ -196,10 +180,10 @@ fastify.post<{
     }
     
     projectState.config.mqtt = {
-      host: request.body.host,
-      port: request.body.port,
-      username: request.body.username,
-      password: request.body.password,
+      host: req.body.host,
+      port: req.body.port,
+      username: req.body.username,
+      password: req.body.password,
     };
     
     mqttListener = createMQTTListener(projectState.config.mqtt);
@@ -230,82 +214,83 @@ fastify.post<{
     await mqttListener.connect();
     
     // Subscribe to specified topics
-    if (request.body.topics) {
-      for (const topic of request.body.topics) {
+    if (req.body.topics) {
+      for (const topic of req.body.topics) {
         await mqttListener.subscribe(topic);
       }
     }
     
-    return { success: true, status: mqttListener.getStatus() };
+    res.json({ success: true, status: mqttListener.getStatus() });
   } catch (error) {
-    throw { 
-      statusCode: 500, 
-      message: `Failed to connect: ${error instanceof Error ? error.message : String(error)}` 
-    };
+    res.status(500).json({ 
+      error: `Failed to connect: ${error instanceof Error ? error.message : String(error)}` 
+    });
   }
 });
 
 /**
  * Subscribe to MQTT topic
  */
-fastify.post<{ Body: { topic: string } }>('/api/mqtt/subscribe', async (request) => {
+app.post('/api/mqtt/subscribe', async (req: Request, res: Response) => {
   if (!mqttListener || !mqttListener.isConnected()) {
-    throw { statusCode: 400, message: 'Not connected to MQTT broker' };
+    res.status(400).json({ error: 'Not connected to MQTT broker' });
+    return;
   }
   
-  await mqttListener.subscribe(request.body.topic);
-  return { success: true, status: mqttListener.getStatus() };
+  await mqttListener.subscribe(req.body.topic);
+  res.json({ success: true, status: mqttListener.getStatus() });
 });
 
 /**
  * Unsubscribe from MQTT topic
  */
-fastify.post<{ Body: { topic: string } }>('/api/mqtt/unsubscribe', async (request) => {
+app.post('/api/mqtt/unsubscribe', async (req: Request, res: Response) => {
   if (!mqttListener || !mqttListener.isConnected()) {
-    throw { statusCode: 400, message: 'Not connected to MQTT broker' };
+    res.status(400).json({ error: 'Not connected to MQTT broker' });
+    return;
   }
   
-  await mqttListener.unsubscribe(request.body.topic);
-  return { success: true, status: mqttListener.getStatus() };
+  await mqttListener.unsubscribe(req.body.topic);
+  res.json({ success: true, status: mqttListener.getStatus() });
 });
 
 /**
  * Disconnect from MQTT broker
  */
-fastify.post('/api/mqtt/disconnect', async () => {
+app.post('/api/mqtt/disconnect', async (req: Request, res: Response) => {
   if (mqttListener) {
     await mqttListener.disconnect();
     mqttListener = null;
   }
-  return { success: true };
+  res.json({ success: true });
 });
 
 /**
  * Get MQTT status
  */
-fastify.get('/api/mqtt/status', async () => {
-  return mqttListener?.getStatus() ?? { connected: false, subscribedTopics: [], messageCount: 0 };
+app.get('/api/mqtt/status', (req: Request, res: Response) => {
+  res.json(mqttListener?.getStatus() ?? { connected: false, subscribedTopics: [], messageCount: 0 });
 });
 
 /**
  * Add topic substitution
  */
-fastify.post<{ Body: TopicSubstitution }>('/api/substitutions', async (request) => {
-  projectState.config.topicSubstitutions.push(request.body);
+app.post('/api/substitutions', (req: Request, res: Response) => {
+  projectState.config.topicSubstitutions.push(req.body);
   
   if (projectState.messages.length > 0) {
     regenerateSpec();
   }
   
   broadcastState();
-  return { success: true, substitutions: projectState.config.topicSubstitutions };
+  res.json({ success: true, substitutions: projectState.config.topicSubstitutions });
 });
 
 /**
  * Remove topic substitution
  */
-fastify.delete<{ Params: { index: string } }>('/api/substitutions/:index', async (request) => {
-  const index = parseInt(request.params.index, 10);
+app.delete('/api/substitutions/:index', (req: Request, res: Response) => {
+  const index = parseInt(req.params.index, 10);
   if (index >= 0 && index < projectState.config.topicSubstitutions.length) {
     projectState.config.topicSubstitutions.splice(index, 1);
     
@@ -315,53 +300,54 @@ fastify.delete<{ Params: { index: string } }>('/api/substitutions/:index', async
     
     broadcastState();
   }
-  return { success: true, substitutions: projectState.config.topicSubstitutions };
+  res.json({ success: true, substitutions: projectState.config.topicSubstitutions });
 });
 
 /**
  * Detect parameters automatically
  */
-fastify.post('/api/detect-parameters', async () => {
+app.post('/api/detect-parameters', (req: Request, res: Response) => {
   const suggestions = detectParameters(projectState.messages);
-  return { success: true, suggestions };
+  res.json({ success: true, suggestions });
 });
 
 /**
  * Generate/regenerate the spec
  */
-fastify.post('/api/generate', async () => {
+app.post('/api/generate', (req: Request, res: Response) => {
   regenerateSpec();
   broadcastState();
-  return { 
+  res.json({ 
     success: true, 
     spec: projectState.generatedSpec,
     output: projectState.generatedSpec 
       ? exportDocument(projectState.generatedSpec, projectState.config.outputFormat)
       : null,
-  };
+  });
 });
 
 /**
  * Export the generated spec
  */
-fastify.get<{ Querystring: { format?: 'yaml' | 'json' } }>('/api/export', async (request, reply) => {
+app.get('/api/export', (req: Request, res: Response) => {
   if (!projectState.generatedSpec) {
-    throw { statusCode: 400, message: 'No spec generated yet' };
+    res.status(400).json({ error: 'No spec generated yet' });
+    return;
   }
   
-  const format = request.query.format || projectState.config.outputFormat;
+  const format = (req.query.format as 'yaml' | 'json') || projectState.config.outputFormat;
   const content = exportDocument(projectState.generatedSpec, format);
   const filename = `asyncapi.${format}`;
   
-  reply.header('Content-Type', format === 'yaml' ? 'text/yaml' : 'application/json');
-  reply.header('Content-Disposition', `attachment; filename="${filename}"`);
-  return content;
+  res.setHeader('Content-Type', format === 'yaml' ? 'text/yaml' : 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(content);
 });
 
 /**
  * Clear all messages
  */
-fastify.post('/api/clear', async () => {
+app.post('/api/clear', (req: Request, res: Response) => {
   projectState.messages = [];
   projectState.generatedSpec = null;
   resetSchemaRegistry();
@@ -371,26 +357,34 @@ fastify.post('/api/clear', async () => {
   }
   
   broadcastState();
-  return { success: true };
+  res.json({ success: true });
 });
 
 /**
  * Merge with existing spec
  */
-fastify.post<{ Body: { existingSpec: string } }>('/api/merge', async (request) => {
+app.post('/api/merge', (req: Request, res: Response) => {
   if (!projectState.generatedSpec) {
-    throw { statusCode: 400, message: 'No spec generated yet' };
+    res.status(400).json({ error: 'No spec generated yet' });
+    return;
   }
   
   try {
-    const existingDoc = JSON.parse(request.body.existingSpec) as AsyncAPIDocument;
+    const existingDoc = JSON.parse(req.body.existingSpec) as AsyncAPIDocument;
     projectState.generatedSpec = mergeAsyncAPIDocs(existingDoc, projectState.generatedSpec);
     broadcastState();
-    return { success: true };
+    res.json({ success: true });
   } catch (error) {
-    throw { statusCode: 400, message: 'Failed to parse existing spec' };
+    res.status(400).json({ error: 'Failed to parse existing spec' });
   }
 });
+
+// SPA fallback for production
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req: Request, res: Response) => {
+    res.sendFile(join(__dirname, '../../dist/client/index.html'));
+  });
+}
 
 // Helper functions
 
@@ -431,8 +425,8 @@ function getStateForClient(): {
   };
 }
 
-function sendToClient(socket: import('ws').WebSocket, message: WSMessage): void {
-  if (socket.readyState === 1) { // OPEN
+function sendToClient(socket: WebSocket, message: WSMessage): void {
+  if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
   }
 }
@@ -440,7 +434,7 @@ function sendToClient(socket: import('ws').WebSocket, message: WSMessage): void 
 function broadcast(message: WSMessage): void {
   const data = JSON.stringify(message);
   for (const client of wsClients) {
-    if (client.readyState === 1) {
+    if (client.readyState === WebSocket.OPEN) {
       client.send(data);
     }
   }
@@ -453,7 +447,7 @@ function broadcastState(): void {
   });
 }
 
-function handleWebSocketMessage(socket: import('ws').WebSocket, message: WSMessage): void {
+function handleWebSocketMessage(socket: WebSocket, message: WSMessage): void {
   switch (message.type) {
     case 'get_state':
       sendToClient(socket, {
@@ -479,10 +473,6 @@ function handleWebSocketMessage(socket: import('ws').WebSocket, message: WSMessa
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 
-try {
-  await fastify.listen({ port: PORT, host: HOST });
+server.listen(PORT, HOST, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
-} catch (err) {
-  fastify.log.error(err);
-  process.exit(1);
-}
+});

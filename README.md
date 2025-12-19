@@ -140,7 +140,7 @@ The tool expects JSON with a nested hierarchy where leaf nodes contain:
 ## Tech Stack
 
 - **Frontend**: React 18, Vite, TailwindCSS
-- **Backend**: Fastify, WebSocket
+- **Backend**: Express, WebSocket (ws)
 - **MQTT**: mqtt.js
 - **Language**: TypeScript
 
