@@ -58,22 +58,21 @@ function inferStringSchema(value: string, includeExamples: boolean): JSONSchema 
  * Detect string format from value
  */
 function detectStringFormat(value: string): string | undefined {
-  // ISO 8601 date-time
+  // ISO 8601 date-time only (strict)
+  // Examples: 2024-01-15T10:30:00Z, 2024-01-15T10:30:00.123Z, 2024-01-15T10:30:00+05:00
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(value)) {
     return 'date-time';
   }
 
-  // ISO 8601 date
+  // ISO 8601 date only
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return 'date';
   }
 
-  // US date format
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*(AM|PM)?$/i.test(value)) {
-    return 'date-time';
-  }
+  // Note: US date formats like "4/18/2016 12:00:00 AM" are NOT marked as date-time
+  // because AsyncAPI Studio validates against ISO 8601 and would show errors
 
-  // Time
+  // Time (24-hour format)
   if (/^\d{2}:\d{2}:\d{2}$/.test(value)) {
     return 'time';
   }
