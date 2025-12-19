@@ -130,6 +130,7 @@ function inferArraySchema(value: unknown[], includeExamples: boolean): JSONSchem
 /**
  * Infer schema for object values
  * Filters out metadata fields that start with underscore
+ * Does not mark properties as required (report-by-exception pattern)
  */
 function inferObjectSchema(
   value: Record<string, unknown>,
@@ -138,7 +139,6 @@ function inferObjectSchema(
   const schema: JSONSchema = {
     type: 'object',
     properties: {},
-    required: [],
   };
 
   for (const [key, val] of Object.entries(value)) {
@@ -148,20 +148,14 @@ function inferObjectSchema(
     }
 
     schema.properties![key] = inferSchema(val, includeExamples);
-    
-    // Consider all fields as required since they're present in the sample
-    if (val !== null && val !== undefined) {
-      schema.required!.push(key);
-    }
   }
 
-  // Sort required array for consistency
-  schema.required!.sort();
-
-  // Remove required array if empty
-  if (schema.required!.length === 0) {
-    delete schema.required;
-  }
+  // Add _timestamp field to all object schemas (required for all messages)
+  schema.properties!['_timestamp'] = {
+    type: 'string',
+    format: 'date-time',
+    description: 'Timestamp when the data was published',
+  };
 
   return schema;
 }
@@ -211,6 +205,7 @@ export function mergeSchemas(schema1: JSONSchema, schema2: JSONSchema): JSONSche
 
 /**
  * Merge two object schemas
+ * Does not merge required fields (all properties are optional)
  */
 function mergeObjectSchemas(schema1: JSONSchema, schema2: JSONSchema): JSONSchema {
   const merged: JSONSchema = {
@@ -234,14 +229,7 @@ function mergeObjectSchemas(schema1: JSONSchema, schema2: JSONSchema): JSONSchem
     }
   }
 
-  // Required fields are those present in both schemas
-  const required1 = new Set(schema1.required || []);
-  const required2 = new Set(schema2.required || []);
-  const required = Array.from(required1).filter(r => required2.has(r));
-  
-  if (required.length > 0) {
-    merged.required = required.sort();
-  }
+  // No required fields in merged schemas (report-by-exception pattern)
 
   return merged;
 }
