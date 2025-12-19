@@ -142,7 +142,8 @@ function inferObjectSchema(
   };
 
   for (const [key, val] of Object.entries(value)) {
-    // Skip metadata fields (those starting with _)
+    // Skip metadata fields (those starting with _) except _timestamp
+    // We'll handle _timestamp separately to ensure consistent schema
     if (key.startsWith('_')) {
       continue;
     }
@@ -150,7 +151,8 @@ function inferObjectSchema(
     schema.properties![key] = inferSchema(val, includeExamples);
   }
 
-  // Add _timestamp field to all object schemas (required for all messages)
+  // Add _timestamp field to all object schemas for message payloads
+  // This field is included in all messages but not marked as required (report-by-exception)
   schema.properties!['_timestamp'] = {
     type: 'string',
     format: 'date-time',
