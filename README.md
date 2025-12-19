@@ -1,6 +1,6 @@
 # AsyncAPI Generator
 
-A web-based tool for generating AsyncAPI specifications from JSON examples. Supports both AsyncAPI 2.6.0 and 3.0.0 versions. **Runs entirely in the browser** - no backend required!
+A web-based tool for generating AsyncAPI specifications from JSON examples. Supports both AsyncAPI 2.6.0 and 3.0.0 versions.
 
 ## Features
 
@@ -17,6 +17,27 @@ A web-based tool for generating AsyncAPI specifications from JSON examples. Supp
 - **Real-time Preview**: Live YAML/JSON preview of the generated specification
 - **Export**: Download the generated spec as YAML or JSON
 
+## Two Deployment Modes
+
+### 1. Static/Browser-Only (Vercel)
+
+Runs entirely in the browser - no backend required. Upload JSON files to generate specs.
+
+```bash
+npm run dev      # Development
+npm run build    # Build for deployment (outputs to dist/)
+```
+
+### 2. Full-Stack with MQTT (Local)
+
+Includes a Fastify server with live MQTT capture capabilities.
+
+```bash
+npm run dev:full      # Development (server + client)
+npm run build:full    # Production build
+npm run start         # Run production server
+```
+
 ## 🚀 Deployment on Vercel
 
 This app is designed for static deployment on Vercel (or any static hosting):
@@ -32,35 +53,10 @@ npm run build
 
 The `vercel.json` is already configured for automatic deployment.
 
-## Installation (Local Development)
+## Installation
 
 ```bash
 npm install
-```
-
-## Usage
-
-### Development Mode
-
-```bash
-npm run dev
-```
-
-This starts the Vite development server at http://localhost:5173. All processing happens in the browser.
-
-### Production Build
-
-```bash
-npm run build
-npm run preview
-```
-
-### Full Server Mode (Optional)
-
-If you need the full server with MQTT live capture:
-
-```bash
-npm run dev:full
 ```
 
 ## How to Use
