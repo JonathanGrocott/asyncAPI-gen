@@ -2,28 +2,17 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+// Static build configuration for Vercel deployment
 export default defineConfig({
   plugins: [react()],
+  root: '.',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, './src/shared'),
-    },
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:3001',
-        ws: true,
-      },
+      '@lib': path.resolve(__dirname, './src/lib'),
     },
   },
   build: {
-    outDir: 'dist/client',
+    outDir: 'dist',
   },
 });
