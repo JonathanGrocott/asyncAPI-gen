@@ -12,6 +12,8 @@ A web-based tool for generating AsyncAPI specifications from JSON examples. Supp
   - **Verbose**: One channel per unique topic
   - **Parameterized**: Create template topics with parameters (e.g., `Building/{area}/Machine/{machineId}`)
 - **Schema Inference**: Automatically infers JSON Schema from payload examples
+  - All schemas include `_timestamp` field for message timestamps
+  - No required fields (report-by-exception pattern)
 - **Schema Deduplication**: Automatically reuses schemas for identical payloads
 - **Model-based Grouping**: Uses `_model` field in JSON data to group and name schemas
 - **Real-time Preview**: Live YAML/JSON preview of the generated specification
