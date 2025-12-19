@@ -120,6 +120,7 @@ function extractPayload(node: HierarchyNode): Record<string, unknown> {
 
 /**
  * Check if an object is a hierarchy node (contains hierarchy structure)
+ * Recursively checks if this node or any descendant contains _path
  */
 function isHierarchyNode(obj: unknown): boolean {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
@@ -131,10 +132,10 @@ function isHierarchyNode(obj: unknown): boolean {
   // If it has _path, it's definitely a hierarchy node
   if ('_path' in record) return true;
   
-  // Check if any child is a hierarchy node
+  // Recursively check if any child is a hierarchy node
   for (const value of Object.values(record)) {
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      if ('_path' in value) return true;
+      if (isHierarchyNode(value)) return true;
     }
   }
   
