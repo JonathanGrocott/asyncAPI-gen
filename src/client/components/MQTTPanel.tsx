@@ -116,25 +116,25 @@ export function MQTTPanel({ status, onConnect, onDisconnect, onSubscribe }: MQTT
             <p className="text-xs text-slate-400 mb-1">Subscribed topics:</p>
             <div className="flex flex-wrap gap-1">
               {status.subscribedTopics.map((topic, i) => (
-                <span key={i} className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
+                <span key={i} className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded truncate max-w-full">
                   {topic}
                 </span>
               ))}
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="space-y-2">
             <input
               type="text"
               placeholder="Add topic subscription"
               value={newTopic}
               onChange={(e) => setNewTopic(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSubscribe()}
-              className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <button
               onClick={handleSubscribe}
-              className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded transition-colors text-sm"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors text-sm"
             >
               Subscribe
             </button>
