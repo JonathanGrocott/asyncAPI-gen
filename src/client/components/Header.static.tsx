@@ -14,11 +14,19 @@ export function Header() {
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400">
             <span className="w-2 h-2 rounded-full bg-purple-400" />
             Client-Side Only
           </span>
+          <a 
+            href="https://github.com/JonathanGrocott" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            @J.Grocott
+          </a>
         </div>
       </div>
     </header>
