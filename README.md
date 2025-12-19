@@ -30,7 +30,7 @@ npm run build    # Build for deployment (outputs to dist/)
 
 ### 2. Full-Stack with MQTT (Local)
 
-Includes a Fastify server with live MQTT capture capabilities.
+Includes an Express server with live MQTT capture capabilities.
 
 ```bash
 npm run dev:full      # Development (server + client)
@@ -38,11 +38,16 @@ npm run build:full    # Production build
 npm run start         # Run production server
 ```
 
+**Note:** You need an MQTT broker running. Quick start with Docker:
+```bash
+docker run -d --name mosquitto -p 1883:1883 eclipse-mosquitto:2 mosquitto -c /mosquitto-no-auth.conf
+```
+
 ## 🚀 Deployment on Vercel
 
 This app is designed for static deployment on Vercel (or any static hosting):
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/asyncAPI-gen&project-name=asyncapi-generator&repository-name=asyncapi-generator)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/JonathanGrocott/asyncAPI-gen&project-name=asyncapi-generator&repository-name=asyncapi-generator)
 
 Or manually:
 

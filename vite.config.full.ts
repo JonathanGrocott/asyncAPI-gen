@@ -4,7 +4,19 @@ import path from 'path';
 
 // Full-stack build configuration (with server proxy)
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'html-transform',
+      transformIndexHtml(html) {
+        // Replace static entry point with full entry point
+        return html.replace(
+          '/src/client/main.static.tsx',
+          '/src/client/main.tsx'
+        );
+      },
+    },
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
