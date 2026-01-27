@@ -4,7 +4,7 @@
  */
 
 import type { ChannelDefinition, ExtractedMessage, JSONSchema, TopicSubstitution, GeneratorConfig } from './types';
-import { inferSchema, hashSchema, mergeSchemas } from './schema-inferrer';
+import { inferSchema } from './schema-inferrer';
 import { SchemaRegistry } from './schema-registry';
 
 export interface ProcessedChannels {
@@ -14,21 +14,13 @@ export interface ProcessedChannels {
 
 /**
  * Apply topic substitutions to a topic string
+ * For client-side, we typically use verbose mode and don't apply substitutions
+ * This function is kept for API compatibility but returns the topic as-is
  */
-export function applyTopicSubstitutions(topic: string, substitutions: TopicSubstitution[]): string {
-  let result = topic;
-  for (const sub of substitutions) {
-    if (sub.pattern && sub.replacement) {
-      try {
-        const regex = new RegExp(sub.pattern, 'g');
-        result = result.replace(regex, sub.replacement);
-      } catch {
-        // Invalid regex, skip this substitution
-        console.warn(`Invalid regex pattern: ${sub.pattern}`);
-      }
-    }
-  }
-  return result;
+export function applyTopicSubstitutions(topic: string, _substitutions: TopicSubstitution[]): string {
+  // For client-side usage, we don't apply parameterization
+  // The substitutions are for server-side parameterized mode
+  return topic;
 }
 
 /**
@@ -56,10 +48,12 @@ export function processMessages(
 
   for (const message of messages) {
     const topic = applyTopicSubstitutions(message.topic, config.topicSubstitutions);
-    const schemaName = generateSchemaName(topic);
+    
+    // Use model name if available, otherwise generate from topic
+    const schemaName = message.modelName || generateSchemaName(topic);
     
     // Infer schema from payload
-    const inferredSchema = inferSchema(message.payload, schemaName);
+    const inferredSchema = inferSchema(message.payload, config.includeExamples);
     
     // Register the schema (handles deduplication and merging)
     const registeredName = registry.register(schemaName, inferredSchema);
@@ -142,10 +136,12 @@ export class ChannelManager {
    */
   addMessage(message: ExtractedMessage): void {
     const topic = applyTopicSubstitutions(message.topic, this.config.topicSubstitutions);
-    const schemaName = generateSchemaName(topic);
+    
+    // Use model name if available, otherwise generate from topic
+    const schemaName = message.modelName || generateSchemaName(topic);
     
     // Infer and register schema
-    const inferredSchema = inferSchema(message.payload, schemaName);
+    const inferredSchema = inferSchema(message.payload, this.config.includeExamples);
     const registeredName = this.schemaRegistry.register(schemaName, inferredSchema);
     
     // Get or create channel
