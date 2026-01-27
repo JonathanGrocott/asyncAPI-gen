@@ -14,7 +14,7 @@ export function Header({ isConnected }: HeaderProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">AsyncAPI Generator</h1>
-            <p className="text-sm text-slate-400">Generate AsyncAPI definitions from JSON or MQTT</p>
+            <p className="text-sm text-slate-400">Generate AsyncAPI definitions from JSON data or HighByte Project Exports</p>
           </div>
         </div>
         
