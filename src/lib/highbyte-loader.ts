@@ -12,6 +12,9 @@ import type {
   HighByteModel,
   HighByteAttribute,
   HighByteInternalType,
+  HighByteNamespace,
+  HighByteNamespaceReference,
+  HighByteInstance,
 } from './highbyte-types';
 
 export interface HighByteLoaderResult {
@@ -40,11 +43,19 @@ export function loadHighByteProject(data: unknown): HighByteLoaderResult {
   // Extract models and convert to JSON Schema
   const models = extractModels(project.modeling?.models || []);
   
+  // Build instance-to-model mapping
+  const instanceToModel = buildInstanceToModelMap(project.modeling?.instances || []);
+  
+  // Build namespace lookup tree
+  const namespaceTree = buildNamespaceTree(project.namespace || []);
+  
   // Extract MQTT outputs as publish messages
   const publishMessages = extractMQTTOutputs(
     project.outputs,
     project.connections,
     models,
+    namespaceTree,
+    instanceToModel,
     warnings
   );
   
@@ -53,6 +64,8 @@ export function loadHighByteProject(data: unknown): HighByteLoaderResult {
     project.inputs,
     project.connections,
     models,
+    namespaceTree,
+    instanceToModel,
     warnings
   );
   
@@ -224,12 +237,125 @@ function convertTypeToSchema(type: HighByteInternalType): JSONSchema {
 }
 
 /**
+ * Build a map from instance name to model name
+ */
+function buildInstanceToModelMap(instances: HighByteInstance[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const instance of instances) {
+    map.set(instance.name, instance.model);
+  }
+  return map;
+}
+
+/**
+ * Build namespace tree for topic-to-instance lookup
+ */
+interface NamespaceNode {
+  id: string;
+  name: string;
+  reference: HighByteNamespaceReference;
+  children: Map<string, NamespaceNode>;
+}
+
+function buildNamespaceTree(namespaces: HighByteNamespace[]): Map<string, NamespaceNode> {
+  // Build nodes map
+  const nodesById = new Map<string, NamespaceNode>();
+  const rootNodes = new Map<string, NamespaceNode>();
+  
+  // Create all nodes first
+  for (const ns of namespaces) {
+    const node: NamespaceNode = {
+      id: ns.id,
+      name: ns.name,
+      reference: ns.reference,
+      children: new Map(),
+    };
+    nodesById.set(ns.id, node);
+  }
+  
+  // Build parent-child relationships
+  for (const ns of namespaces) {
+    const node = nodesById.get(ns.id)!;
+    if (ns.parentNamespaceId) {
+      const parent = nodesById.get(ns.parentNamespaceId);
+      if (parent) {
+        parent.children.set(ns.name, node);
+      }
+    } else {
+      // Root node
+      rootNodes.set(ns.name, node);
+    }
+  }
+  
+  return rootNodes;
+}
+
+/**
+ * Resolve a topic path to an instance name using namespace tree
+ */
+function resolveTopicToInstance(
+  topic: string,
+  namespaceTree: Map<string, NamespaceNode>
+): string | null {
+  const segments = topic.split('/').filter(Boolean);
+  
+  // Try to match starting from each root node
+  // This handles cases where the topic path doesn't include the root namespace name
+  for (const rootNode of namespaceTree.values()) {
+    // Try matching from this root
+    const result = walkNamespacePath(segments, rootNode.children);
+    if (result) return result;
+  }
+  
+  // Also try matching with the first segment being a root
+  const firstSegment = segments[0];
+  const rootNode = namespaceTree.get(firstSegment);
+  if (rootNode && segments.length > 1) {
+    const result = walkNamespacePath(segments.slice(1), rootNode.children);
+    if (result) return result;
+  }
+  
+  return null;
+}
+
+/**
+ * Walk down the namespace tree following the path segments
+ */
+function walkNamespacePath(
+  segments: string[],
+  currentLevel: Map<string, NamespaceNode>
+): string | null {
+  let currentNode: NamespaceNode | undefined;
+  
+  for (const segment of segments) {
+    currentNode = currentLevel.get(segment);
+    if (!currentNode) {
+      // Try with underscore prefix (e.g., "11132013" -> "_11132013")
+      currentNode = currentLevel.get(`_${segment}`);
+      if (!currentNode) {
+        return null; // Path doesn't exist in namespace
+      }
+    }
+    currentLevel = currentNode.children;
+  }
+  
+  // Check if the final node has an Instance reference
+  if (currentNode && currentNode.reference.type === 'Instance' && currentNode.reference.name) {
+    return currentNode.reference.name;
+  }
+  
+  return null;
+}
+
+/**
  * Extract MQTT outputs (publish operations)
  */
 function extractMQTTOutputs(
   outputs: HighByteOutput[],
   connections: HighByteConnection[],
   models: Map<string, JSONSchema>,
+  namespaceTree: Map<string, NamespaceNode>,
+  instanceToModel: Map<string, string>,
   warnings: string[]
 ): ExtractedMessage[] {
   const messages: ExtractedMessage[] = [];
@@ -256,8 +382,25 @@ function extractMQTTOutputs(
       continue;
     }
     
-    // Try to find a matching model
-    const modelName = findMatchingModel(output.name, models);
+    // Resolve topic to instance using namespace tree
+    const instanceName = resolveTopicToInstance(topic, namespaceTree);
+    let modelName: string | null = null;
+    
+    if (instanceName) {
+      // Get model from instance
+      modelName = instanceToModel.get(instanceName) || null;
+    }
+    
+    // Fallback to fuzzy matching if namespace resolution didn't work
+    if (!modelName) {
+      modelName = findMatchingModel(output.name, models);
+      if (!modelName) {
+        warnings.push(
+          `MQTT output "${output.name}" (topic: ${topic}) could not be resolved to a model. Using default payload.`
+        );
+      }
+    }
+    
     let payload: Record<string, unknown>;
     
     if (modelName && models.has(modelName)) {
@@ -265,13 +408,10 @@ function extractMQTTOutputs(
       const schema = models.get(modelName)!;
       payload = createSampleFromSchema(schema);
     } else {
-      // No model found - create default payload with warning
+      // No model found - create default payload
       payload = {
         _note: 'No HighByte model found for this output',
       };
-      warnings.push(
-        `MQTT output "${output.name}" has no associated model. Using default payload.`
-      );
     }
     
     messages.push({
@@ -279,7 +419,7 @@ function extractMQTTOutputs(
       payload,
       modelName: modelName || undefined,
       timestamp: new Date(),
-      servers: [connection.name],
+      servers: [connection.name], // Associate with the specific server/connection
     });
   }
   
@@ -293,6 +433,8 @@ function extractMQTTInputs(
   inputs: HighByteInput[],
   connections: HighByteConnection[],
   models: Map<string, JSONSchema>,
+  namespaceTree: Map<string, NamespaceNode>,
+  instanceToModel: Map<string, string>,
   warnings: string[]
 ): ExtractedMessage[] {
   const messages: ExtractedMessage[] = [];
@@ -319,8 +461,25 @@ function extractMQTTInputs(
       continue;
     }
     
-    // Try to find a matching model
-    const modelName = findMatchingModel(input.name, models);
+    // Resolve topic to instance using namespace tree
+    const instanceName = resolveTopicToInstance(topic, namespaceTree);
+    let modelName: string | null = null;
+    
+    if (instanceName) {
+      // Get model from instance
+      modelName = instanceToModel.get(instanceName) || null;
+    }
+    
+    // Fallback to fuzzy matching if namespace resolution didn't work
+    if (!modelName) {
+      modelName = findMatchingModel(input.name, models);
+      if (!modelName) {
+        warnings.push(
+          `MQTT input "${input.name}" (topic: ${topic}) could not be resolved to a model. Using default payload.`
+        );
+      }
+    }
+    
     let payload: Record<string, unknown>;
     
     if (modelName && models.has(modelName)) {
@@ -328,13 +487,10 @@ function extractMQTTInputs(
       const schema = models.get(modelName)!;
       payload = createSampleFromSchema(schema);
     } else {
-      // No model found - create default payload with warning
+      // No model found - create default payload
       payload = {
         _note: 'No HighByte model found for this input',
       };
-      warnings.push(
-        `MQTT input "${input.name}" has no associated model. Using default payload.`
-      );
     }
     
     messages.push({
@@ -342,7 +498,7 @@ function extractMQTTInputs(
       payload,
       modelName: modelName || undefined,
       timestamp: new Date(),
-      servers: [connection.name],
+      servers: [connection.name], // Associate with the specific server/connection
     });
   }
   
@@ -373,13 +529,14 @@ function findMatchingModel(name: string, models: Map<string, JSONSchema>): strin
   }
   
   // Try matching by key terms (e.g., "AFP2_Alarms" -> "ATLM_Alarms_v1")
+  // Extract key terms from the input/output name
   const nameTerms = lowerName.split(/[_\-\/]/);
   
   for (const modelName of models.keys()) {
     const lowerModelName = modelName.toLowerCase();
     const modelTerms = lowerModelName.split(/[_\-\/]/);
     
-    // Check if there's significant term overlap
+    // Check if there's significant term overlap (at least one term matches)
     const matchingTerms = nameTerms.filter(term => 
       term.length > 2 && modelTerms.some(mt => mt.includes(term) || term.includes(mt))
     );

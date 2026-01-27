@@ -20,7 +20,9 @@ export interface HighByteProject {
   outputs: HighByteOutput[];
   modeling?: {
     models: HighByteModel[];
+    instances?: HighByteInstance[];
   };
+  namespace?: HighByteNamespace[];
   pipelines?: HighBytePipeline[];
 }
 
@@ -150,4 +152,43 @@ export interface HighBytePipelineTrigger {
   name: string;
   display?: Record<string, unknown>;
   config?: Record<string, unknown>;
+}
+
+// Namespace types
+export interface HighByteNamespace {
+  id: string;
+  name: string;
+  parentNamespaceId?: string;
+  reference: HighByteNamespaceReference;
+}
+
+export interface HighByteNamespaceReference {
+  type: 'Empty' | 'Instance' | 'Input' | 'Output';
+  name?: string;
+  path?: string;
+  params?: Record<string, unknown>;
+  connectionName?: string;
+}
+
+// Instance types
+export interface HighByteInstance {
+  name: string;
+  model: string;
+  groupAs?: string;
+  tags?: string[];
+  attributes?: HighByteInstanceAttribute[];
+  rootValueAs?: string;
+  template?: Record<string, unknown>;
+  executeMode?: string;
+  initExpression?: string;
+  parameters?: HighByteParameters;
+}
+
+export interface HighByteInstanceAttribute {
+  name: string;
+  expression?: {
+    type: string;
+    reference?: HighByteNamespaceReference;
+    [key: string]: unknown;
+  };
 }
