@@ -76,6 +76,8 @@ export interface ExtractedMessage {
   modelName?: string;
   /** Timestamp when captured */
   timestamp: Date;
+  /** Server names this message is available on (for multi-server setups) */
+  servers?: string[];
 }
 
 // Schema registry entry
@@ -117,6 +119,8 @@ export interface ChannelDefinition {
   parameters: Record<string, { description?: string; enum?: string[] }>;
   /** Messages associated with this channel */
   messages: ExtractedMessage[];
+  /** Server names this channel is available on */
+  servers?: string[];
 }
 
 // Project state (for UI)

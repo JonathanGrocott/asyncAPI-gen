@@ -104,6 +104,13 @@ function buildChannel30(
     messages: {},
   };
 
+  // Add server references if channel is available on specific servers
+  if (channel.servers && channel.servers.length > 0) {
+    channelDef.servers = channel.servers.map(serverName => ({
+      $ref: `#/servers/${serverName}`,
+    }));
+  }
+
   // Add parameters if any
   if (Object.keys(channel.parameters).length > 0) {
     channelDef.parameters = {};

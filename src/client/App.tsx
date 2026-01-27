@@ -82,6 +82,7 @@ function App() {
       ws.onmessage = (event) => {
         try {
           const message: WSMessage = JSON.parse(event.data);
+          console.log('📬 Raw WebSocket message:', { type: message.type, payloadKeys: Object.keys(message.payload || {}) });
           handleWSMessage(message);
         } catch (e) {
           console.error('Failed to parse WebSocket message:', e);
@@ -99,8 +100,15 @@ function App() {
   }, []);
 
   const handleWSMessage = useCallback((message: WSMessage) => {
+    console.log('📨 WebSocket message received:', message.type);
+    
     switch (message.type) {
       case 'state':
+        console.log('State update received:', {
+          messageCount: (message.payload as AppState).stats?.messageCount,
+          hasSpec: !!(message.payload as AppState).spec,
+          specLength: (message.payload as AppState).spec?.length,
+        });
         setState(message.payload as AppState);
         break;
       case 'mqtt_message':
@@ -145,16 +153,35 @@ function App() {
     }
   };
 
-  const uploadJson = async (content: string) => {
+  const uploadJson = async (content: string, type: 'json' | 'highbyte' = 'json') => {
     try {
-      const response = await fetch('/api/upload/json', {
+      console.log(`📤 Uploading ${type} file...`);
+      const endpoint = type === 'highbyte' ? '/api/upload/highbyte' : '/api/upload/json';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       });
-      if (!response.ok) throw new Error('Failed to upload JSON');
+      
+      console.log(`Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Upload error:', errorData);
+        throw new Error(errorData.error || 'Failed to upload file');
+      }
+      
+      const result = await response.json();
+      console.log('✅ Upload successful:', result);
+      
+      // Show success message with details
+      if (type === 'highbyte' && result.warnings?.length > 0) {
+        console.warn('HighByte import warnings:', result.warnings);
+      }
+      
       setError(null);
     } catch (e) {
+      console.error('Upload failed:', e);
       setError(e instanceof Error ? e.message : 'Unknown error');
     }
   };

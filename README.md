@@ -5,6 +5,7 @@ A web-based tool for generating AsyncAPI specifications from JSON examples. Supp
 ## Features
 
 - **JSON Import**: Upload JSON files or paste JSON data directly
+- **HighByte Intelligence Hub Support**: Import HighByte project exports to automatically generate AsyncAPI specs
 - **Server Configuration**: Configure MQTT brokers for the generated spec
 - **Dual Version Support**: Generate specs for AsyncAPI 2.6.0 or 3.0.0
 - **Developer-Centric Documentation**: Uses `subscribe`/`receive` operations to document channels from a developer's perspective
@@ -81,7 +82,17 @@ In the **Configuration** panel:
 - JSON should contain nested objects with `_path` fields (backslash-separated topic paths)
 - Optional `_model` field identifies the schema type
 
-**Option B: MQTT Connection**
+**Option B: HighByte Intelligence Hub Project**
+- Export your project from HighByte Intelligence Hub (Project → Export → Full Project)
+- Upload the exported JSON file
+- The tool will automatically:
+  - Extract MQTT connections as servers
+  - Convert models to JSON schemas
+  - Map inputs/outputs to AsyncAPI channels
+  - Match models to messages intelligently
+  - **Assign each channel to the correct server** based on the connection used in HighByte
+
+**Option C: MQTT Connection**
 - Enter broker host and port (e.g., `localhost:1883`)
 - Optionally provide credentials
 - Subscribe to topics using MQTT wildcards (`#` for all, `+` for single level)
@@ -125,6 +136,141 @@ The tool expects JSON with a nested hierarchy where leaf nodes contain:
 - `_model`: Schema identifier for grouping similar payloads
 - Other fields become the message payload schema
 
+## HighByte Intelligence Hub Integration
+
+### Overview
+
+This tool natively supports HighByte Intelligence Hub project exports, enabling you to automatically generate AsyncAPI specifications from your industrial IoT configurations.
+
+### How to Export from HighByte
+
+1. Open your HighByte Intelligence Hub instance
+2. Navigate to **Project** in the main menu
+3. Go to the **Export** tab
+4. Select **Full Project**
+5. Click **Export** and then **Download**
+
+### What Gets Extracted
+
+The tool analyzes your HighByte project and extracts:
+
+**Connections → Servers**
+- MQTT broker connections become AsyncAPI servers
+- Connection URIs are parsed to extract host, port, and protocol
+- Connection descriptions are preserved
+
+**Models → Schemas**
+- HighByte models are converted to JSON Schema
+- Type mapping:
+  - `String` → `string`
+  - `Int32` → `integer` (format: int32)
+  - `Int64` → `integer` (format: int64)
+  - `Float` → `number` (format: float)
+  - `Double` → `number` (format: double)
+  - `Boolean` → `boolean`
+  - `DateTime` → `string` (format: date-time)
+  - `Any` → no type constraint
+- Nullable and required attributes are preserved
+
+**Inputs → Subscribe Operations**
+- MQTT inputs become `receive` operations in AsyncAPI
+- Topics are extracted from input qualifiers
+- Models are intelligently matched to inputs
+
+**Outputs → Publish Operations**
+- MQTT outputs become `send` operations in AsyncAPI
+- Topics are extracted from output qualifiers
+- Models are intelligently matched to outputs
+
+### Model Matching
+
+The tool uses intelligent matching to associate HighByte models with inputs/outputs:
+
+1. **Direct name match**: Exact name matches
+2. **Case-insensitive match**: Ignores case differences
+3. **Partial match**: Finds models contained in names or vice versa
+4. **Term-based match**: Matches by key terms (e.g., "AFP2_Alarms" → "ATLM_Alarms_v1")
+
+When no model is found, a default payload is used with a warning in the description.
+
+### Example
+
+Input (HighByte):
+```json
+{
+  "productInfo": { "product": "IntelligenceHub", ... },
+  "project": {
+    "connections": [{
+      "name": "HiveMQ",
+      "uri": "mqtt://broker.example.com:1883"
+    }],
+    "outputs": [{
+      "name": "AFP2_Alarms",
+      "connection": "HiveMQ",
+      "type": "mqtt",
+      "qualifier": { "topic": "factory/area/machine/alarms" }
+    }],
+    "modeling": {
+      "models": [{
+        "name": "AFP_EMOM_v1",
+        "attributes": [
+          { "name": "MachineID", "internalType": "String" },
+          { "name": "MachineState", "internalType": "Int64" }
+        ]
+      }]
+    }
+  }
+}
+```
+
+Output (AsyncAPI 3.0):
+```yaml
+servers:
+  HiveMQ:
+    host: broker.example.com:1883
+    protocol: mqtt
+
+channels:
+  factoryAreaMachineAlarms:
+    address: factory/area/machine/alarms
+    messages:
+      afpEmomV1:
+        payload:
+          type: object
+          properties:
+            MachineID:
+              type: string
+            MachineState:
+              type: integer
+              format: int64
+
+operations:
+  publishFactoryAreaMachineAlarms:
+    action: send
+    channel:
+      $ref: '#/channels/factoryAreaMachineAlarms'
+```
+
+### Limitations
+
+- Currently supports MQTT connections only (REST, OPC UA, etc. are ignored)
+- Pipeline configurations are not analyzed for data flow inference
+- Only focuses on inputs and outputs, not pipeline stages
+- Template variables (e.g., `{{Instance.Model}}`) in qualifiers are not resolved
+
+### Testing Your HighByte Export
+
+Use the included test script to validate your export:
+
+```bash
+npx tsx test/test-highbyte-loader.ts
+```
+
+This will show:
+- Number of messages, servers, and models extracted
+- Sample message topics and their matched models
+- Any warnings about unmatched models
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -132,6 +278,7 @@ The tool expects JSON with a nested hierarchy where leaf nodes contain:
 | `/api/state` | GET | Get current project state |
 | `/api/config` | POST | Update configuration |
 | `/api/upload/json` | POST | Upload JSON content |
+| `/api/upload/highbyte` | POST | Upload HighByte project export |
 | `/api/mqtt/connect` | POST | Connect to MQTT broker |
 | `/api/mqtt/subscribe` | POST | Subscribe to topic |
 | `/api/mqtt/disconnect` | POST | Disconnect from broker |

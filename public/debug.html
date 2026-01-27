@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AsyncAPI Generator - Debug Console</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #60a5fa;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 10px;
+        }
+        .section {
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 5px;
+        }
+        .status.connected {
+            background: #10b981;
+            color: white;
+        }
+        .status.disconnected {
+            background: #ef4444;
+            color: white;
+        }
+        .log-entry {
+            padding: 5px;
+            margin: 2px 0;
+            border-left: 3px solid #3b82f6;
+            padding-left: 10px;
+        }
+        .log-entry.error {
+            border-left-color: #ef4444;
+            background: #7f1d1d33;
+        }
+        .log-entry.success {
+            border-left-color: #10b981;
+            background: #06402833;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        input[type="file"] {
+            padding: 10px;
+            margin: 10px 0;
+        }
+        pre {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 AsyncAPI Generator - Debug Console</h1>
+    
+    <div class="section">
+        <h2>WebSocket Status</h2>
+        <div id="wsStatus" class="status disconnected">Disconnected</div>
+        <div id="wsMessages">Messages received: 0</div>
+    </div>
+    
+    <div class="section">
+        <h2>Upload HighByte File</h2>
+        <input type="file" id="fileInput" accept=".json">
+        <button onclick="uploadFile()">Upload</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div class="section">
+        <h2>Current State</h2>
+        <button onclick="fetchState()">Fetch State</button>
+        <pre id="stateDisplay">Click "Fetch State" to load</pre>
+    </div>
+    
+    <div class="section">
+        <h2>Event Log</h2>
+        <div id="logContainer"></div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let messageCount = 0;
+        let lastState = null;
+        
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+            log('Logs cleared');
+        }
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.hostname}:${window.location.port}/ws`;
+            
+            log(`Connecting to WebSocket: ${wsUrl}`);
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('✅ WebSocket connected', 'success');
+                document.getElementById('wsStatus').className = 'status connected';
+                document.getElementById('wsStatus').textContent = 'Connected';
+            };
+            
+            ws.onclose = () => {
+                log('❌ WebSocket disconnected', 'error');
+                document.getElementById('wsStatus').className = 'status disconnected';
+                document.getElementById('wsStatus').textContent = 'Disconnected';
+                setTimeout(() => {
+                    log('Attempting to reconnect...');
+                    connectWebSocket();
+                }, 3000);
+            };
+            
+            ws.onerror = (error) => {
+                log('❌ WebSocket error: ' + error, 'error');
+            };
+            
+            ws.onmessage = (event) => {
+                messageCount++;
+                document.getElementById('wsMessages').textContent = `Messages received: ${messageCount}`;
+                
+                try {
+                    const message = JSON.parse(event.data);
+                    log(`📨 WebSocket message: ${message.type}`, 'success');
+                    
+                    if (message.type === 'state') {
+                        lastState = message.payload;
+                        log(`   └─ Message count: ${message.payload.stats?.messageCount || 0}`);
+                        log(`   └─ Has spec: ${!!message.payload.spec}`);
+                        log(`   └─ Spec length: ${message.payload.spec?.length || 0} bytes`);
+                    }
+                } catch (e) {
+                    log('❌ Failed to parse WebSocket message: ' + e, 'error');
+                }
+            };
+        }
+        
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files.length) {
+                log('❌ No file selected', 'error');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            log(`📤 Reading file: ${file.name}`);
+            
+            try {
+                const content = await file.text();
+                log(`   └─ File size: ${content.length} bytes`);
+                
+                // Check if it's a HighByte file
+                const parsed = JSON.parse(content);
+                const isHighByte = parsed.productInfo?.product === 'IntelligenceHub';
+                
+                if (isHighByte) {
+                    log('✅ Detected HighByte Intelligence Hub project', 'success');
+                } else {
+                    log('⚠️  Not a HighByte file, uploading as generic JSON');
+                }
+                
+                const endpoint = isHighByte ? '/api/upload/highbyte' : '/api/upload/json';
+                log(`📤 Uploading to: ${endpoint}`);
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content }),
+                });
+                
+                log(`   └─ Response status: ${response.status}`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    log(`❌ Upload failed: ${error.error}`, 'error');
+                    return;
+                }
+                
+                const result = await response.json();
+                log('✅ Upload successful!', 'success');
+                log(`   └─ Messages added: ${result.messagesAdded}`);
+                log(`   └─ Servers found: ${result.serversFound || 0}`);
+                log(`   └─ Models found: ${result.modelsFound || 0}`);
+                
+                if (result.warnings && result.warnings.length > 0) {
+                    log(`⚠️  Warnings: ${result.warnings.length}`, 'error');
+                    result.warnings.forEach(w => log(`   └─ ${w}`, 'error'));
+                }
+                
+                // Wait a bit and fetch state
+                setTimeout(() => {
+                    log('Waiting for WebSocket state update...');
+                    setTimeout(fetchState, 500);
+                }, 100);
+                
+            } catch (e) {
+                log(`❌ Upload error: ${e.message}`, 'error');
+                console.error('Full error:', e);
+            }
+        }
+        
+        async function fetchState() {
+            log('🔄 Fetching current state...');
+            try {
+                const response = await fetch('/api/state');
+                const state = await response.json();
+                
+                log('✅ State fetched', 'success');
+                log(`   └─ Message count: ${state.stats?.messageCount || 0}`);
+                log(`   └─ Has spec: ${!!state.spec}`);
+                log(`   └─ Spec length: ${state.spec?.length || 0} bytes`);
+                log(`   └─ Models: ${state.stats?.models?.length || 0}`);
+                log(`   └─ Unique topics: ${state.stats?.uniqueTopics || 0}`);
+                
+                document.getElementById('stateDisplay').textContent = JSON.stringify(state, null, 2);
+            } catch (e) {
+                log(`❌ Failed to fetch state: ${e.message}`, 'error');
+            }
+        }
+        
+        // Connect on page load
+        connectWebSocket();
+        log('Debug console initialized');
+    </script>
+</body>
+</html>

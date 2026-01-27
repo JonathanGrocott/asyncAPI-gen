@@ -16,7 +16,7 @@ import type {
   TopicSubstitution,
   WSMessage 
 } from './shared/types.js';
-import { loadJsonFile, parseJsonContent, groupByModel } from './loader/index.js';
+import { loadJsonFile, parseJsonContent, groupByModel, loadHighByteProject } from './loader/index.js';
 import { buildChannels, detectParameters } from './channels/index.js';
 import { SchemaRegistry, getSchemaRegistry, resetSchemaRegistry } from './registry/index.js';
 import { 
@@ -143,6 +143,61 @@ app.post('/api/upload/json', (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(400).json({ error: 'Failed to parse JSON content' });
+  }
+});
+
+/**
+ * Upload HighByte project file
+ */
+app.post('/api/upload/highbyte', (req: Request, res: Response) => {
+  try {
+    console.log('📥 HighByte upload endpoint called');
+    console.log('WebSocket clients connected:', wsClients.size);
+    
+    // Parse the JSON content string
+    const content = typeof req.body.content === 'string' 
+      ? JSON.parse(req.body.content) 
+      : req.body.content;
+    
+    const result = loadHighByteProject(content);
+    console.log('HighByte project loaded:', {
+      messages: result.messages.length,
+      servers: result.servers.length,
+      models: result.models.size,
+    });
+    
+    // Add extracted messages to project state
+    projectState.messages = [...projectState.messages, ...result.messages];
+    
+    // Update server config if HighByte servers were found
+    if (result.servers.length > 0 && !projectState.config.servers) {
+      projectState.config.servers = result.servers;
+    }
+    
+    // Regenerate spec
+    console.log('Regenerating spec...');
+    regenerateSpec();
+    console.log('Spec generated:', projectState.generatedSpec ? 'yes' : 'no');
+    
+    console.log('Broadcasting state to', wsClients.size, 'clients');
+    broadcastState();
+    
+    const responseData = {
+      success: true,
+      messagesAdded: result.messages.length,
+      totalMessages: projectState.messages.length,
+      serversFound: result.servers.length,
+      modelsFound: result.models.size,
+      warnings: result.warnings,
+    };
+    console.log('Sending response:', responseData);
+    
+    res.json(responseData);
+  } catch (error) {
+    console.error('HighByte upload error:', error);
+    res.status(400).json({ 
+      error: `Failed to parse HighByte project: ${error instanceof Error ? error.message : String(error)}` 
+    });
   }
 });
 
@@ -441,9 +496,17 @@ function broadcast(message: WSMessage): void {
 }
 
 function broadcastState(): void {
+  const state = getStateForClient();
+  console.log('Broadcasting state update:', {
+    messageCount: state.stats.messageCount,
+    hasSpec: !!state.spec,
+    specLength: state.spec?.length,
+    models: state.stats.models,
+  });
+  
   broadcast({
     type: 'state',
-    payload: getStateForClient(),
+    payload: state,
   });
 }
 

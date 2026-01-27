@@ -38,10 +38,21 @@ function buildVerboseChannels(messages: ExtractedMessage[]): ChannelDefinition[]
         topic: message.topic,
         parameters: {},
         messages: [],
+        servers: [],
       });
     }
 
-    channelMap.get(message.topic)!.messages.push(message);
+    const channel = channelMap.get(message.topic)!;
+    channel.messages.push(message);
+    
+    // Aggregate server information
+    if (message.servers) {
+      for (const server of message.servers) {
+        if (!channel.servers!.includes(server)) {
+          channel.servers!.push(server);
+        }
+      }
+    }
   }
 
   return Array.from(channelMap.values());
@@ -70,10 +81,21 @@ function buildParameterizedChannels(
         topic: parameterizedTopic,
         parameters: buildParameterDefinitions(parameters, substitutions),
         messages: [],
+        servers: [],
       });
     }
 
-    channelMap.get(parameterizedTopic)!.messages.push(message);
+    const channel = channelMap.get(parameterizedTopic)!;
+    channel.messages.push(message);
+    
+    // Aggregate server information
+    if (message.servers) {
+      for (const server of message.servers) {
+        if (!channel.servers!.includes(server)) {
+          channel.servers!.push(server);
+        }
+      }
+    }
   }
 
   return Array.from(channelMap.values());

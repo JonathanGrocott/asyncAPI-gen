@@ -1,13 +1,14 @@
 import { useCallback, useState } from 'react';
 
 interface JsonUploadProps {
-  onUpload: (content: string) => void;
+  onUpload: (content: string, type: 'json' | 'highbyte') => void;
 }
 
 export function JsonUpload({ onUpload }: JsonUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
+  const [uploadType, setUploadType] = useState<'json' | 'highbyte'>('json');
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -18,6 +19,21 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
     e.preventDefault();
     setIsDragging(false);
   }, []);
+
+  const detectFileType = (_filename: string, content: string): 'json' | 'highbyte' => {
+    try {
+      const parsed = JSON.parse(content);
+      // Check if it's a HighByte project export
+      if (parsed.productInfo?.product === 'IntelligenceHub' && parsed.project) {
+        console.log('✅ Detected HighByte Intelligence Hub project export');
+        return 'highbyte';
+      }
+    } catch (error) {
+      console.error('Failed to parse JSON for file type detection:', error);
+    }
+    console.log('📄 Detected regular JSON file');
+    return 'json';
+  };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -30,7 +46,8 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
-          onUpload(content);
+          const type = detectFileType(file.name, content);
+          onUpload(content, type);
         };
         reader.readAsText(file);
       }
@@ -43,7 +60,8 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
-        onUpload(content);
+        const type = detectFileType(file.name, content);
+        onUpload(content, type);
       };
       reader.readAsText(file);
     }
@@ -52,7 +70,7 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
 
   const handleTextSubmit = () => {
     if (textInput.trim()) {
-      onUpload(textInput);
+      onUpload(textInput, uploadType);
       setTextInput('');
       setShowTextInput(false);
     }
@@ -85,6 +103,9 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
             <p className="text-sm text-slate-400 mb-2">
               Drag & drop a JSON file here
             </p>
+            <p className="text-xs text-slate-500 mb-2">
+              Supports JSON samples or HighByte Intelligence Hub exports
+            </p>
             <label className="inline-block">
               <input
                 type="file"
@@ -107,10 +128,36 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
         </>
       ) : (
         <div className="space-y-3">
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => setUploadType('json')}
+              className={`flex-1 py-1.5 px-3 rounded text-xs transition-colors ${
+                uploadType === 'json'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              JSON Samples
+            </button>
+            <button
+              onClick={() => setUploadType('highbyte')}
+              className={`flex-1 py-1.5 px-3 rounded text-xs transition-colors ${
+                uploadType === 'highbyte'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-slate-700 text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              HighByte Project
+            </button>
+          </div>
           <textarea
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Paste your JSON here..."
+            placeholder={
+              uploadType === 'json'
+                ? 'Paste your JSON samples here...'
+                : 'Paste your HighByte Intelligence Hub project export here...'
+            }
             className="w-full h-40 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
           />
           <div className="flex gap-2">
@@ -125,7 +172,7 @@ export function JsonUpload({ onUpload }: JsonUploadProps) {
               disabled={!textInput.trim()}
               className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed text-white py-2 px-4 rounded transition-colors text-sm"
             >
-              Load JSON
+              Load {uploadType === 'json' ? 'JSON' : 'HighByte'}
             </button>
           </div>
         </div>
