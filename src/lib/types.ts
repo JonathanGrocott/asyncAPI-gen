@@ -50,6 +50,7 @@ export interface ExtractedMessage {
   payload: Record<string, unknown>;
   modelName?: string;
   timestamp: Date;
+  servers?: string[];
 }
 
 // JSON Schema type

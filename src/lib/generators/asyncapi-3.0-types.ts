@@ -49,6 +49,7 @@ export interface Channel30 {
     description?: string;
     enum?: string[];
   }>;
+  servers?: Array<{ $ref: string }>;
   bindings?: Record<string, unknown>;
 }
 

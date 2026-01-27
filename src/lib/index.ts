@@ -29,6 +29,20 @@ export {
   groupByTopic,
 } from './json-parser';
 
+// HighByte Loader
+export {
+  loadHighByteProject,
+  type HighByteLoaderResult,
+} from './highbyte-loader';
+
+export type {
+  HighByteProjectExport,
+  HighByteConnection,
+  HighByteOutput,
+  HighByteInput,
+  HighByteModel,
+} from './highbyte-types';
+
 // Schema Inference
 export {
   inferSchema,
@@ -78,9 +92,22 @@ export function generateAsyncAPISpec(
   // Process messages into channels and schemas
   const { channels, schemas } = processMessages(messages, config);
 
+  // Aggregate server information from messages by topic
+  const serversByTopic = new Map<string, Set<string>>();
+  for (const message of messages) {
+    if (message.servers && message.servers.length > 0) {
+      if (!serversByTopic.has(message.topic)) {
+        serversByTopic.set(message.topic, new Set());
+      }
+      for (const server of message.servers) {
+        serversByTopic.get(message.topic)!.add(server);
+      }
+    }
+  }
+
   // Generate the appropriate version
   if (config.version === '3.0.0') {
-    return generateAsyncAPI30(channels, schemas, config);
+    return generateAsyncAPI30(channels, schemas, config, serversByTopic);
   } else {
     return generateAsyncAPI26(channels, schemas, config);
   }

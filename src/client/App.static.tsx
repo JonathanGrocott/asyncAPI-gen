@@ -16,6 +16,9 @@ import {
   type ServerConfig,
 } from '../lib';
 
+// Import HighByte loader
+import { loadHighByteProject } from '../lib/highbyte-loader';
+
 // Components
 import { Header } from './components/Header.static';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -68,26 +71,62 @@ function App() {
   }, []);
 
   // Upload and parse JSON - fully client-side
-  const uploadJson = useCallback((content: string) => {
+  const uploadJson = useCallback((content: string, type: 'json' | 'highbyte' = 'json') => {
     try {
-      const messages = parseJsonContent(content);
+      let messages: ExtractedMessage[];
+      let extractedServers: ServerConfig[] = [];
+      
+      if (type === 'highbyte') {
+        console.log('📥 Processing HighByte project file...');
+        const data = JSON.parse(content);
+        const result = loadHighByteProject(data);
+        
+        console.log('HighByte import result:', {
+          messages: result.messages.length,
+          servers: result.servers.length,
+          models: result.models.size,
+          warnings: result.warnings.length,
+        });
+        
+        messages = result.messages;
+        extractedServers = result.servers;
+        
+        if (result.warnings.length > 0) {
+          console.warn('HighByte import warnings:', result.warnings);
+        }
+      } else {
+        messages = parseJsonContent(content);
+      }
       
       // Calculate stats
       const uniqueTopics = new Set(messages.map(m => m.topic));
       const models = [...new Set(messages.map(m => m.modelName).filter(Boolean))] as string[];
       
-      setState(prev => ({
-        ...prev,
-        messages: [...prev.messages, ...messages],
-        stats: {
-          messageCount: prev.stats.messageCount + messages.length,
-          uniqueTopics: uniqueTopics.size,
-          models,
-        },
-      }));
+      setState(prev => {
+        const newState = {
+          ...prev,
+          messages: [...prev.messages, ...messages],
+          stats: {
+            messageCount: prev.stats.messageCount + messages.length,
+            uniqueTopics: uniqueTopics.size,
+            models,
+          },
+        };
+        
+        // Add servers from HighByte if found
+        if (extractedServers.length > 0) {
+          newState.config = {
+            ...prev.config,
+            servers: extractedServers,
+          };
+        }
+        
+        return newState;
+      });
       
       setError(null);
     } catch (e) {
+      console.error('Upload error:', e);
       setError(e instanceof Error ? e.message : 'Failed to parse JSON');
     }
   }, []);

@@ -11,7 +11,8 @@ import type { AsyncAPI30Document, Channel30, Operation30, Message30 } from './as
 export function generateAsyncAPI30(
   channels: ChannelDefinition[],
   schemas: Record<string, JSONSchema>,
-  config: GeneratorConfig
+  config: GeneratorConfig,
+  serversByTopic?: Map<string, Set<string>>
 ): AsyncAPI30Document {
   const doc: AsyncAPI30Document = {
     asyncapi: '3.0.0',
@@ -32,7 +33,8 @@ export function generateAsyncAPI30(
   // Process each channel
   for (const channel of channels) {
     const channelId = topicToChannelId(channel.topic);
-    const { channelDef, operation, messages } = buildChannel30(channel, channelId, config);
+    const servers = serversByTopic?.get(channel.topic);
+    const { channelDef, operation, messages } = buildChannel30(channel, channelId, config, servers);
     
     doc.channels![channelId] = channelDef;
     doc.operations![`subscribe_${channelId}`] = operation;
@@ -84,7 +86,8 @@ function buildServers30(config: GeneratorConfig): AsyncAPI30Document['servers'] 
 function buildChannel30(
   channel: ChannelDefinition,
   channelId: string,
-  config: GeneratorConfig
+  config: GeneratorConfig,
+  servers?: Set<string>
 ): {
   channelDef: Channel30;
   operation: Operation30;
@@ -96,6 +99,13 @@ function buildChannel30(
     description: channel.description,
     messages: {},
   };
+
+  // Add server references if channel is available on specific servers
+  if (servers && servers.size > 0) {
+    channelDef.servers = Array.from(servers).map(serverName => ({
+      $ref: `#/servers/${serverName}`,
+    }));
+  }
 
   // Build single message for channel
   const msgId = `${channelId}_message`;
